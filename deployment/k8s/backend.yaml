@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secrets
+  namespace: local-delivery
+stringData:
+  SECRET_KEY: change-me
+  POSTGRES_PASSWORD: postgres
+  RAZORPAY_KEY_ID: ""
+  RAZORPAY_KEY_SECRET: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: local-delivery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: local-delivery-backend:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SECRET_KEY
+            - name: DATABASE_URL
+              value: postgresql://postgres:$(POSTGRES_PASSWORD)@postgres.local-delivery.svc.cluster.local:5432/local_delivery
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+            - name: REDIS_URL
+              value: redis://redis.local-delivery.svc.cluster.local:6379/1
+            - name: CELERY_BROKER_URL
+              value: redis://redis.local-delivery.svc.cluster.local:6379/0
+            - name: CELERY_RESULT_BACKEND
+              value: redis://redis.local-delivery.svc.cluster.local:6379/0
+            - name: KEYCLOAK_SERVER_URL
+              value: http://keycloak.local-delivery.svc.cluster.local:8080
+            - name: KEYCLOAK_REALM
+              value: local-delivery
+            - name: KEYCLOAK_CLIENT_ID
+              value: local-delivery-app
+            - name: RAZORPAY_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: RAZORPAY_KEY_ID
+            - name: RAZORPAY_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: RAZORPAY_KEY_SECRET
+            - name: ALLOWED_HOSTS
+              value: backend.local
+            - name: DEBUG
+              value: "false"
+            - name: FRONTEND_URL
+              value: http://frontend.local
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: local-delivery
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
